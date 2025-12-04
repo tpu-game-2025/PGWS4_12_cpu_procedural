@@ -1,0 +1,120 @@
+using UnityEngine;
+using System.Collections.Generic;
+
+public class RandomWalkMonoBehaviourScript : MonoBehaviour
+{
+    [SerializeField] MeshFilter meshFilter = default!;
+
+    [SerializeField][Range(0.0f, 90.0f)] private float bendMax = 70.0f;
+    [SerializeField][Range(0.0f, 1.0f)] private float gravityRate = 0.3f;
+    [SerializeField][Range(0.0f, 100.0f)] private float distanceMin = 3.0f;
+    [SerializeField][Range(0.0f, 100.0f)] private float distanceMax = 20.0f;
+
+    float time = 0.0f;
+
+    void Update()
+    {
+        time -= Time.deltaTime;
+        if (time <= 0.0f)
+        {
+            Generate();
+            time = Random.Range(1.0f, 3.0f);// 1秒から3秒の間隔で再生成
+        }
+    }
+
+    void Generate()
+    {
+        // 到達経路の生成
+        float HEIGHT = 1000.0f;
+        Vector3 pos = new Vector3(0.0f, HEIGHT, 0.0f);
+        Vector3 dir = Vector3.down;
+
+        List<Vector3> path = new List<Vector3>();
+        path.Add(pos);
+        for(int i = 0; i < 1000; i++)// 進む最大値に制限
+        {
+            float angle = Random.Range(-bendMax, +bendMax);// 曲がる角度
+            Quaternion q = Quaternion.AngleAxis(angle, Vector3.forward);
+            dir = q * dir;
+            dir = Vector3.Lerp(dir, Vector3.down, gravityRate);// 徐々に下方向に戻す
+
+            float distance = Random.Range(distanceMin, distanceMax);
+            pos += dir.normalized * distance;
+            path.Add(pos);
+
+            if(pos.y < 0.0f) break;// 地面に到達
+        }
+
+        // メッシュの構築
+        UpdateMesh(path);
+    }
+
+    void UpdateMesh(List<Vector3> path)
+    {
+        int n = path.Count;
+
+        int vertexCount = 2 * n;
+        Vector3[] vertices = new Vector3[vertexCount];
+        float halfWidth = 3.0f;
+
+        int vtx = 0;
+        // 始点
+        {
+            Vector3 center = path[0];
+            vertices[vtx + 0] = center + Vector3.left * halfWidth;
+            vertices[vtx + 1] = center - Vector3.left * halfWidth;
+            vtx += 2;
+        }
+        for (int i = 1; i < n - 1; i++)
+        {
+            Vector3 center = path[i];
+            // 幅方向のベクトルを計算: 端点以外は前後の差分で方向を決定
+            Vector3 right = (path[i + 1] - path[i - 1]).normalized;
+            right = new Vector3(-right.y, right.x, right.z);// 90度回転
+            vertices[vtx + 0] = center + right * halfWidth;
+            vertices[vtx + 1] = center - right * halfWidth;
+            vtx += 2;
+        }
+        // 終点
+        {
+            Vector3 center = path[n - 1];
+            vertices[vtx + 0] = center + Vector3.left * halfWidth;
+            vertices[vtx + 1] = center - Vector3.left * halfWidth;
+            vtx += 2;
+        }
+
+        Color[] colors = new Color[vertexCount];
+        for (int i = 0; i < vertexCount; i++)
+        {
+            colors[i] = Color.white;
+        }
+
+        int polygonCount = 2 * (n - 1);// 線分の数
+        int[] triangles = new int[3 * polygonCount];
+        int idx = 0;
+        vtx = 0;
+        while (idx < 3 * polygonCount)
+        {
+            triangles[idx + 0] = vtx + 0;
+            triangles[idx + 1] = vtx + 2;
+            triangles[idx + 2] = vtx + 1;
+
+            triangles[idx + 3] = vtx + 1;
+            triangles[idx + 4] = vtx + 2;
+            triangles[idx + 5] = vtx + 3;
+
+            idx += 6;
+            vtx += 2;
+        }
+
+        Mesh Mesh = meshFilter.mesh;
+
+        Mesh.Clear();
+        Mesh.vertices = vertices;
+        Mesh.colors = colors;
+        Mesh.triangles = triangles;
+
+        Mesh.RecalculateBounds();
+        Mesh.RecalculateNormals();
+    }
+}
